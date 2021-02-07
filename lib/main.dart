@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:math';
-import 'constants.dart';
+import 'package:messenger_ui/constants.dart';
+import 'package:messenger_ui/widgets/exit_bubble.dart';
+import 'package:messenger_ui/widgets/message_bubble.dart';
+import 'package:messenger_ui/widgets/reset_button.dart';
 
 void main() {
   runApp(MyApp());
@@ -35,44 +38,82 @@ class Messenger extends StatefulWidget {
 }
 
 class _MessengerState extends State<Messenger> {
-  bool fingerDown = false;
+  bool fingerDown = false, attached = false, reset = false;
   double messageBubbleX = 0, messageBubbleY = 0;
-
   double exitBubbleX, exitBubbleY;
-
   double screenWidth, screenHeight;
+  double angle, reach = startingReach, distance;
 
   @override
   Widget build(BuildContext context) {
     if (screenWidth == null || screenHeight == null) {
       screenWidth = MediaQuery.of(context).size.width;
       screenHeight = MediaQuery.of(context).size.height;
+
+      exitBubbleX = screenWidth / 2 - radius;
+      exitBubbleY = screenHeight;
     }
 
     void onStart(DragStartDetails details) {
       fingerDown = true;
-      exitBubbleY = screenHeight - 120;
+      setState(() {
+        exitBubbleY = screenHeight - reach;
+      });
     }
 
     void onUpdate(DragUpdateDetails details) {
-      messageBubbleX += details.delta.dx;
-      messageBubbleY += details.delta.dy;
+      angle = atan((0.5 * screenWidth - messageBubbleX - radius) /
+          (screenHeight - messageBubbleY - radius));
 
-      setState(() {});
+      setState(() {
+        messageBubbleX += details.delta.dx;
+        messageBubbleY += details.delta.dy;
+
+        distance = pow(
+            pow(screenWidth / 2 - messageBubbleX, 2) +
+                pow(screenHeight - messageBubbleY, 2),
+            0.5);
+
+        if (distance < startingReach) {
+          attached = true;
+        } else {
+          attached = false;
+        }
+
+        reach = startingReach * (distance / 400);
+
+        if (reach > startingReach) {
+          reach = startingReach;
+        } else if (reach < startingReach / 2) {
+          reach = startingReach / 2;
+        }
+
+        exitBubbleX = screenWidth / 2 - radius + cos(-angle - pi / 2) * reach;
+        exitBubbleY = screenHeight + sin(-angle - pi / 2) * reach;
+        if (exitBubbleY > screenHeight - 2 * radius) {
+          exitBubbleY = screenHeight - 2 * radius;
+        }
+      });
     }
 
     void onEnd(DragEndDetails details) {
       fingerDown = false;
 
-      if (messageBubbleX + radius <= screenWidth / 2) {
-        messageBubbleX = 0;
-      } else {
-        messageBubbleX = screenWidth - radius * 2;
-      }
+      setState(() {
+        if (messageBubbleX + radius <= screenWidth / 2) {
+          messageBubbleX = 0;
+        } else {
+          messageBubbleX = screenWidth - radius * 2;
+        }
 
-      exitBubbleY = screenHeight;
+        if (attached) {
+          reset = true;
+        }
 
-      setState(() {});
+        exitBubbleY = screenHeight;
+        exitBubbleX = screenWidth / 2 - radius;
+        reach = startingReach;
+      });
     }
 
     return Scaffold(
@@ -83,54 +124,37 @@ class _MessengerState extends State<Messenger> {
               color: background,
             ),
             AnimatedPositioned(
-              duration: Duration(milliseconds: fingerDown ? 0 : 200),
-              left: messageBubbleX,
-              top: messageBubbleY,
-              child: GestureDetector(
-                onPanStart: onStart,
-                onPanUpdate: onUpdate,
-                onPanEnd: onEnd,
-                child: Container(
-                  width: radius * 2,
-                  height: radius * 2,
-                  decoration: BoxDecoration(
-                    color: bubbleColor,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-            ),
-            AnimatedPositioned(
               duration: Duration(milliseconds: 100),
               left: exitBubbleX,
               top: exitBubbleY,
-              child: Container(
-                width: radius * 2,
-                height: radius * 2,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade400,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.black,
-                    width: 1,
-                  ),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  'X',
-                  style: TextStyle(
-                    fontSize: 25,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ),
-            )
+              child: ExitBubble(),
+            ),
+            reset
+                ? Center(
+                    child: ResetButton(
+                      function: () => setState(() {
+                        reset = false;
+                        messageBubbleX = 0;
+                        messageBubbleY = 0;
+                      }),
+                    ),
+                  )
+                : AnimatedPositioned(
+                    duration: Duration(
+                        milliseconds: attached ? 40 : (fingerDown ? 0 : 150)),
+                    curve: Curves.easeIn,
+                    left: attached == true ? exitBubbleX : messageBubbleX,
+                    top: attached == true ? exitBubbleY : messageBubbleY,
+                    child: GestureDetector(
+                      onPanStart: onStart,
+                      onPanUpdate: onUpdate,
+                      onPanEnd: onEnd,
+                      child: MessageBubble(),
+                    ),
+                  )
           ],
         ),
       ),
     );
   }
-
-  double calcDistance(x1, y1, x2, y2) =>
-      pow(pow(x2 - x1, 2) + pow(y2 - y1, 2), 0.5);
 }
