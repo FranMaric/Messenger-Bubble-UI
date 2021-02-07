@@ -133,6 +133,8 @@ class _MessengerState extends State<Messenger> {
                 ? Center(
                     child: ResetButton(
                       function: () => setState(() {
+                        fingerDown = false;
+                        attached = false;
                         reset = false;
                         messageBubbleX = 0;
                         messageBubbleY = 0;
